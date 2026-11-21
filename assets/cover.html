@@ -33,12 +33,11 @@
       .brand img { width: 82px; height: 82px; object-fit: contain; }
       .brand-name { font-size: 29px; font-weight: 760; letter-spacing: 4px; }
       .brand-name span { color: #b2ed79; }
-      .eyebrow { color: #b2ed79; font-weight: 750; letter-spacing: 5px; font-size: 14px; margin-bottom: 18px; }
+      .eyebrow { color: #b2ed79; font-weight: 750; letter-spacing: 3px; font-size: 14px; margin-bottom: 18px; }
       h1 { margin: 0; font-size: 76px; line-height: 1.02; letter-spacing: -4px; font-weight: 760; }
       .summary { margin: 28px 0 0; max-width: 565px; color: #aab1a7; font-size: 22px; line-height: 1.55; }
       .chips { display: flex; gap: 12px; margin-top: 44px; }
-      .chip { padding: 13px 17px; border: 1px solid rgba(198,220,188,.18); border-radius: 24px; background: rgba(30,38,31,.75); color: #dbe4d4; font-size: 14px; font-weight: 650; }
-      .chip b { color: #b2ed79; font-weight: 750; }
+      .chip { padding: 13px 16px; border: 1px solid rgba(198,220,188,.18); border-radius: 12px; background: rgba(30,38,31,.75); color: #dbe4d4; font-size: 13px; font-weight: 650; white-space: nowrap; }
       .caption { position: absolute; left: 120px; bottom: 70px; color: #70796f; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
       .phone { position: absolute; background: #080a08; border: 2px solid #485148; border-radius: 47px; padding: 12px; box-shadow: 0 34px 90px rgba(0,0,0,.6); overflow: hidden; }
       .phone img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 35px; }
@@ -55,17 +54,17 @@
         <img src="branding/splash_mark.png" alt="" />
         <div class="brand-name"><span>RGB</span>ELEMENT</div>
       </div>
-      <div class="eyebrow">YOUR SPACE, IN COLOR</div>
-      <h1>In a new<br />light.</h1>
-      <p class="summary">A modern Bluetooth companion for LEDDMX RGB lights. Shape the color, find your favorite effects, and save the moods you love.</p>
+      <div class="eyebrow">LEDDMX · BLUETOOTH LE</div>
+      <h1>Control LEDDMX<br />lighting.</h1>
+      <p class="summary">A Flutter controller for RGB strip hardware, built around the LEDDMX GATT service and command protocol.</p>
       <div class="chips">
-        <div class="chip"><b>01</b> Color studio</div>
-        <div class="chip"><b>211</b> Built-in effects</div>
-        <div class="chip"><b>∞</b> Saved looks</div>
+        <div class="chip">GATT · FFE0 / FFE1</div>
+        <div class="chip">9-byte command frames</div>
+        <div class="chip">7B header · BF footer</div>
       </div>
     </main>
     <div class="phone phone-control"><div class="device-glint"></div><img src="screenshots/control.png" alt="RGBElement color controls" /></div>
     <div class="phone phone-studio"><div class="device-glint"></div><img src="screenshots/studio.png" alt="RGBElement saved looks" /></div>
-    <div class="caption">Bluetooth lighting · Flutter · Android &amp; iOS</div>
+    <div class="caption">BLE GATT · LEDDMX command protocol · Android &amp; iOS</div>
   </body>
 </html>
