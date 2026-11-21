@@ -1601,38 +1601,60 @@ class _StudioFeatureCard extends StatelessWidget {
 }
 
 Future<void> _saveLook(BuildContext context, AppState state) async {
-  final nameController = TextEditingController();
   final name = await showDialog<String>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Name your look'),
-      content: TextField(
-        controller: nameController,
-        autofocus: true,
-        maxLength: 24,
-        decoration: const InputDecoration(hintText: 'e.g. Slow Sunday'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final value = nameController.text.trim();
-            if (value.isNotEmpty) Navigator.pop(context, value);
-          },
-          child: const Text('Save'),
-        ),
-      ],
-    ),
+    builder: (_) => const _NameLookDialog(),
   );
-  nameController.dispose();
   if (name != null && context.mounted) {
     state.saveScene(name);
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text('“$name” added to your looks')));
   }
+}
+
+class _NameLookDialog extends StatefulWidget {
+  const _NameLookDialog();
+
+  @override
+  State<_NameLookDialog> createState() => _NameLookDialogState();
+}
+
+class _NameLookDialogState extends State<_NameLookDialog> {
+  final _nameController = TextEditingController();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Name your look'),
+    content: TextField(
+      controller: _nameController,
+      autofocus: true,
+      maxLength: 24,
+      decoration: const InputDecoration(hintText: 'e.g. Slow Sunday'),
+      onSubmitted: (value) {
+        final name = value.trim();
+        if (name.isNotEmpty) Navigator.pop(context, name);
+      },
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () {
+          final value = _nameController.text.trim();
+          if (value.isNotEmpty) Navigator.pop(context, value);
+        },
+        child: const Text('Save'),
+      ),
+    ],
+  );
 }
 
 class _SceneCard extends StatelessWidget {
