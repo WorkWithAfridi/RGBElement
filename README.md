@@ -4,6 +4,20 @@ RGBElement is a Flutter companion for Bluetooth LED strips that use the LEDDMX c
 
 The app is under active development. It is configured for Android and iOS; Bluetooth behavior can vary between controller firmware revisions and should be checked with the target hardware.
 
+![RGBElement cover: color controls and saved looks](assets/cover.png)
+
+## Screenshots
+
+Captured from the Android app running in a Pixel 10 Pro emulator. The Control screen is shown without a connected light; the Studio screen includes a sample saved look.
+
+| First-run device setup | Color controls |
+|---|---|
+| <img src="assets/screenshots/onboarding.png" alt="RGBElement device onboarding" width="260" /> | <img src="assets/screenshots/control.png" alt="RGBElement color wheel and brightness controls" width="260" /> |
+
+| Built-in effects | Saved looks in Studio |
+|---|---|
+| <img src="assets/screenshots/effects.png" alt="RGBElement searchable effects catalog" width="260" /> | <img src="assets/screenshots/studio.png" alt="RGBElement Studio with a saved look" width="260" /> |
+
 ## What it does
 
 - Guides first-time users through Bluetooth permission, device discovery, and connection.
