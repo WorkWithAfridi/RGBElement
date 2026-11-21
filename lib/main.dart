@@ -79,9 +79,310 @@ class RGBElementApp extends StatelessWidget {
             contentTextStyle: const TextStyle(color: Colors.white),
           ),
         ),
-        home: RGBElementHome(state: state),
+        home: _AppEntry(state: state),
       );
     },
+  );
+}
+
+class _AppEntry extends StatefulWidget {
+  const _AppEntry({required this.state});
+  final AppState state;
+
+  @override
+  State<_AppEntry> createState() => _AppEntryState();
+}
+
+class _AppEntryState extends State<_AppEntry> {
+  late bool _showOnboarding;
+
+  @override
+  void initState() {
+    super.initState();
+    _showOnboarding = !widget.state.onboardingComplete;
+    widget.state.addListener(_onStateChanged);
+  }
+
+  void _onStateChanged() {
+    final shouldShowOnboarding = !widget.state.onboardingComplete;
+    if (mounted && shouldShowOnboarding != _showOnboarding) {
+      setState(() => _showOnboarding = shouldShowOnboarding);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.state.removeListener(_onStateChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => !_showOnboarding
+      ? RGBElementHome(state: widget.state)
+      : _DeviceOnboarding(state: widget.state);
+}
+
+class _DeviceOnboarding extends StatelessWidget {
+  const _DeviceOnboarding({required this.state});
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: AnimatedBuilder(
+        animation: state,
+        builder: (context, _) => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(23, 10, 23, 28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: state.completeOnboarding,
+                      child: const Text('Explore first'),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: const Color(0xffb2ed79).withValues(alpha: .15),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: const Icon(
+                      Icons.blur_on_rounded,
+                      size: 38,
+                      color: Color(0xffb2ed79),
+                    ),
+                  ),
+                  const SizedBox(height: 25),
+                  const Text(
+                    'Let’s connect\nyour light.',
+                    style: TextStyle(
+                      fontSize: 36,
+                      height: 1.05,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -1.3,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Pair once, then your device stays saved for next time.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: Theme.of(context).colorScheme.onSurface
+                          .withValues(alpha: .65),
+                    ),
+                  ),
+                  const SizedBox(height: 25),
+                  _OnboardingSteps(
+                    foundDevice: state.devices.isNotEmpty,
+                    connected: state.isConnected,
+                  ),
+                  const SizedBox(height: 22),
+                  if (state.isConnected) ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
+                        color: const Color(0xffb2ed79).withValues(alpha: .12),
+                        border: Border.all(
+                          color: const Color(0xffb2ed79).withValues(alpha: .3),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: Color(0xffb2ed79),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  state.deviceName ?? 'Your RGB light',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                const Text(
+                                  'Connected and ready to control',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: FilledButton.icon(
+                        onPressed: state.completeOnboarding,
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                        label: const Text('Start controlling'),
+                      ),
+                    ),
+                  ] else ...[
+                    if (state.errorMessage != null) ...[
+                      _ErrorBanner(message: state.errorMessage!),
+                      const SizedBox(height: 12),
+                    ],
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: FilledButton.icon(
+                        onPressed: state.isScanning
+                            ? state.stopScan
+                            : state.scan,
+                        icon: state.isScanning
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.bluetooth_searching_rounded),
+                        label: Text(
+                          state.isScanning
+                              ? 'Searching nearby…'
+                              : state.devices.isEmpty
+                              ? 'Find my light'
+                              : 'Search again',
+                        ),
+                      ),
+                    ),
+                    if (state.devices.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Text(
+                        'LIGHTS NEARBY',
+                        style: TextStyle(
+                          fontSize: 11,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface
+                              .withValues(alpha: .55),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      for (final result in state.devices)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _DeviceRow(
+                            name: result.device.platformName.isNotEmpty
+                                ? result.device.platformName
+                                : result.advertisementData.advName,
+                            rssi: result.rssi,
+                            connecting:
+                                state.isConnecting &&
+                                state.device?.remoteId ==
+                                    result.device.remoteId,
+                            connected: false,
+                            onTap: state.isConnecting
+                                ? () {}
+                                : () => state.connect(result.device),
+                          ),
+                        ),
+                    ] else if (!state.isScanning) ...[
+                      const SizedBox(height: 12),
+                      Center(
+                        child: Text(
+                          'Turn on your light and keep it close to your phone.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.onSurface
+                                .withValues(alpha: .56),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _OnboardingSteps extends StatelessWidget {
+  const _OnboardingSteps({required this.foundDevice, required this.connected});
+  final bool foundDevice;
+  final bool connected;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      _OnboardingStep(number: '1', label: 'Find', active: foundDevice),
+      Expanded(
+        child: Divider(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          indent: 7,
+          endIndent: 7,
+        ),
+      ),
+      _OnboardingStep(number: '2', label: 'Connect', active: connected),
+      Expanded(
+        child: Divider(
+          color: Theme.of(context).colorScheme.outlineVariant,
+          indent: 7,
+          endIndent: 7,
+        ),
+      ),
+      _OnboardingStep(number: '3', label: 'Control', active: connected),
+    ],
+  );
+}
+
+class _OnboardingStep extends StatelessWidget {
+  const _OnboardingStep({
+    required this.number,
+    required this.label,
+    required this.active,
+  });
+  final String number;
+  final String label;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Container(
+        width: 32,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: active
+              ? const Color(0xffb2ed79)
+              : Theme.of(context).colorScheme.surfaceContainerHigh,
+        ),
+        child: active
+            ? const Icon(
+                Icons.check_rounded,
+                size: 18,
+                color: Color(0xff172011),
+              )
+            : Text(number, style: const TextStyle(fontSize: 12)),
+      ),
+      const SizedBox(height: 6),
+      Text(label, style: const TextStyle(fontSize: 11)),
+    ],
   );
 }
 

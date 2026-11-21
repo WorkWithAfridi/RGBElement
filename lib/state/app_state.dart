@@ -54,6 +54,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   bool isConnecting = false;
   bool isConnected = false;
   bool isDark = true;
+  bool onboardingComplete = false;
   String? errorMessage;
   String? deviceName;
   String? lastDeviceId;
@@ -62,6 +63,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _sleepTimer;
   bool _restoreInProgress = false;
   bool _manualDisconnect = false;
+  bool _connectionAttemptInProgress = false;
 
   List<ScanResult> get devices =>
       _results.values
@@ -112,6 +114,16 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     );
     lastDeviceId = prefs.getString('rgbelement.lastDeviceId');
     deviceName = prefs.getString('rgbelement.lastDeviceName');
+    onboardingComplete =
+        prefs.getBool('rgbelement.onboardingComplete') ?? lastDeviceId != null;
+    notifyListeners();
+  }
+
+  Future<void> completeOnboarding() async {
+    if (onboardingComplete) return;
+    onboardingComplete = true;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('rgbelement.onboardingComplete', true);
     notifyListeners();
   }
 
@@ -250,23 +262,24 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> connect(BluetoothDevice target, {bool restoring = false}) async {
     if (device?.remoteId == target.remoteId && isConnected) return;
-    if (device?.remoteId == target.remoteId && isConnecting) return;
-    await stopScan();
-    await disconnect();
+    if (_connectionAttemptInProgress || isConnecting) return;
+    _connectionAttemptInProgress = true;
     _manualDisconnect = false;
-    device = target;
-    isConnecting = true;
-    errorMessage = null;
-    final result = _results[target.remoteId.str];
-    final rememberedName = target.remoteId.str == lastDeviceId
-        ? deviceName
-        : null;
-    deviceName = target.platformName.isNotEmpty
-        ? target.platformName
-        : result?.advertisementData.advName ?? rememberedName;
-    rssi = result?.rssi;
-    notifyListeners();
     try {
+      await stopScan();
+      await disconnect();
+      device = target;
+      isConnecting = true;
+      errorMessage = null;
+      final result = _results[target.remoteId.str];
+      final rememberedName = target.remoteId.str == lastDeviceId
+          ? deviceName
+          : null;
+      deviceName = target.platformName.isNotEmpty
+          ? target.platformName
+          : result?.advertisementData.advName ?? rememberedName;
+      rssi = result?.rssi;
+      notifyListeners();
       if (defaultTargetPlatform == TargetPlatform.android) {
         final sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
         if (sdkInt >= 31 &&
@@ -282,8 +295,10 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       );
       _connectionSubscription = target.connectionState.listen((state) {
         isConnected = state == BluetoothConnectionState.connected;
-        if (!isConnected) _writeCharacteristic = null;
-        isConnecting = false;
+        if (!isConnected) {
+          _writeCharacteristic = null;
+          isConnecting = false;
+        }
         notifyListeners();
       });
       final services = await target.discoverServices(timeout: 15);
@@ -301,6 +316,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       }
       _writeCharacteristic = characteristic;
       isConnected = true;
+      isConnecting = false;
       isOn = true;
       lastDeviceId = target.remoteId.str;
       deviceName ??= target.platformName.isNotEmpty
@@ -317,6 +333,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       try {
         await target.disconnect();
       } catch (_) {}
+    } finally {
+      _connectionAttemptInProgress = false;
     }
     notifyListeners();
   }
