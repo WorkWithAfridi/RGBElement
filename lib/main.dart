@@ -227,16 +227,38 @@ class _HomeTab extends StatelessWidget {
               ),
               const SizedBox(height: 5),
               _ColorWheel(state: state),
-              const SizedBox(height: 12),
-              _FavoriteColors(state: state),
-              const SizedBox(height: 17),
+              Padding(
+                padding: const EdgeInsets.only(top: 1, bottom: 7),
+                child: Text(
+                  'Drag around the ring to choose a color',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Theme.of(context).colorScheme.onSurface
+                        .withValues(alpha: .55),
+                  ),
+                ),
+              ),
+              _SliderCard(
+                icon: Icons.color_lens_outlined,
+                title: 'Color richness',
+                helper: 'Adjusts how vivid the color looks.',
+                value: (HSVColor.fromColor(color).saturation * 100).round(),
+                suffix:
+                    '${(HSVColor.fromColor(color).saturation * 100).round()}%',
+                onChanged: (value) => state.setColorRichness(value.round()),
+              ),
+              const SizedBox(height: 10),
               _SliderCard(
                 icon: Icons.brightness_6_rounded,
                 title: 'Brightness',
+                helper: 'Adjusts how much light the strip emits.',
                 value: state.brightness,
                 suffix: '${state.brightness}%',
                 onChanged: (value) => state.setBrightness(value.round()),
               ),
+              const SizedBox(height: 12),
+              _FavoriteColors(state: state),
+              const SizedBox(height: 17),
               const SizedBox(height: 10),
               _AdvancedControls(state: state),
               const SizedBox(height: 18),
@@ -464,16 +486,10 @@ class _ColorWheel extends StatelessWidget {
   void _update(Offset local, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final delta = local - center;
-    final hue = (math.atan2(delta.dy, delta.dx) * 180 / math.pi + 360) % 360;
     final radius = math.min(size.width, size.height) / 2;
-    final saturation = ((delta.distance - radius * .15) / (radius * .75)).clamp(
-      0.08,
-      1.0,
-    );
-    final hsv = HSVColor.fromColor(Color(state.selectedColor))
-        .withHue(hue)
-        .withSaturation(saturation);
-    state.setColor(hsv.toColor().toARGB32());
+    if (delta.distance < radius * .78) return;
+    final hue = (math.atan2(delta.dy, delta.dx) * 180 / math.pi + 360) % 360;
+    state.setHue(hue);
   }
 
   @override
@@ -488,10 +504,14 @@ class _ColorWheel extends StatelessWidget {
             final size = Size(constraints.maxWidth, constraints.maxHeight);
             final hsv = HSVColor.fromColor(selected);
             return GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onPanDown: (details) => _update(details.localPosition, size),
               onPanUpdate: (details) => _update(details.localPosition, size),
               child: CustomPaint(
-                painter: _WheelPainter(hsv),
+                painter: _WheelPainter(
+                  hsv,
+                  Theme.of(context).colorScheme.surface,
+                ),
                 child: Center(
                   child: Container(
                     width: 84,
@@ -511,11 +531,6 @@ class _ColorWheel extends StatelessWidget {
                         ),
                       ],
                     ),
-                    child: const Icon(
-                      Icons.touch_app_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
                   ),
                 ),
               ),
@@ -528,8 +543,9 @@ class _ColorWheel extends StatelessWidget {
 }
 
 class _WheelPainter extends CustomPainter {
-  const _WheelPainter(this.hsv);
+  const _WheelPainter(this.hsv, this.surfaceColor);
   final HSVColor hsv;
+  final Color surfaceColor;
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
@@ -547,38 +563,19 @@ class _WheelPainter extends CustomPainter {
         ],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius, ringPaint);
-    final inside = radius * .80;
-    final huePaint = Paint()
-      ..shader = SweepGradient(
-        colors: [
-          Color(hsv.withSaturation(1).withValue(1).toColor().toARGB32()),
-          Color(
-            hsv
-                .withHue((hsv.hue + 180) % 360)
-                .withSaturation(1)
-                .withValue(1)
-                .toColor()
-                .toARGB32(),
-          ),
-          Color(hsv.toColor().toARGB32()),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: inside));
-    canvas.drawCircle(center, inside, huePaint);
+    final inside = radius * .78;
+    canvas.drawCircle(center, inside, Paint()..color = surfaceColor);
     canvas.drawCircle(
       center,
       inside,
       Paint()
-        ..shader = RadialGradient(
-          colors: [
-            Colors.white.withValues(alpha: .92),
-            Colors.white.withValues(alpha: 0),
-          ],
-          stops: const [0, 1],
-        ).createShader(Rect.fromCircle(center: center, radius: inside)),
+        ..color = surfaceColor.withValues(alpha: .7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
     );
     final pos = Offset(
-      center.dx + math.cos(hsv.hue * math.pi / 180) * radius * .67,
-      center.dy + math.sin(hsv.hue * math.pi / 180) * radius * .67,
+      center.dx + math.cos(hsv.hue * math.pi / 180) * radius * .89,
+      center.dy + math.sin(hsv.hue * math.pi / 180) * radius * .89,
     );
     canvas.drawCircle(pos, 8, Paint()..color = Colors.white);
     canvas.drawCircle(pos, 5.2, Paint()..color = hsv.toColor());
@@ -586,7 +583,7 @@ class _WheelPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _WheelPainter oldDelegate) =>
-      oldDelegate.hsv != hsv;
+      oldDelegate.hsv != hsv || oldDelegate.surfaceColor != surfaceColor;
 }
 
 class _FavoriteColors extends StatelessWidget {
@@ -689,12 +686,14 @@ class _SliderCard extends StatelessWidget {
     required this.value,
     required this.suffix,
     required this.onChanged,
+    this.helper,
   });
   final IconData icon;
   final String title;
   final int value;
   final String suffix;
   final ValueChanged<double> onChanged;
+  final String? helper;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.fromLTRB(15, 12, 15, 8),
@@ -721,6 +720,21 @@ class _SliderCard extends StatelessWidget {
             ),
           ],
         ),
+        if (helper != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 26, top: 4),
+              child: Text(
+                helper!,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Theme.of(context).colorScheme.onSurface
+                      .withValues(alpha: .5),
+                ),
+              ),
+            ),
+          ),
         Slider(value: value.toDouble(), min: 0, max: 100, onChanged: onChanged),
       ],
     ),

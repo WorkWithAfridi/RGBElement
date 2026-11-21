@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:material_ui/material_ui.dart' show Color, HSVColor;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -273,6 +274,18 @@ class AppState extends ChangeNotifier {
     } else {
       _colorDebounce = Timer(const Duration(milliseconds: 65), _sendColor);
     }
+  }
+
+  void setHue(double hue) {
+    final current = HSVColor.fromColor(Color(selectedColor));
+    setColor(current.withHue(hue).toColor().toARGB32());
+  }
+
+  void setColorRichness(int value) {
+    final current = HSVColor.fromColor(Color(selectedColor));
+    setColor(
+      current.withSaturation(value.clamp(0, 100) / 100).toColor().toARGB32(),
+    );
   }
 
   Future<void> _sendColor() async {
