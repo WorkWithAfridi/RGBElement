@@ -567,6 +567,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     );
     if (activity.length > 30) activity.removeLast();
     _save();
+    notifyListeners();
   }
 
   String _friendlyError(Object error) {
