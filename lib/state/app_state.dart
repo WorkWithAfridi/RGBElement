@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart'
+    show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:material_ui/material_ui.dart' show Color, HSVColor;
 import 'package:permission_handler/permission_handler.dart';
@@ -10,14 +12,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/light_scene.dart';
 import '../protocol/leddmx_protocol.dart';
 
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier with WidgetsBindingObserver {
   AppState() {
+    WidgetsBinding.instance.addObserver(this);
     _scanSubscription = FlutterBluePlus.onScanResults.listen(_onScanResults);
     _scanningSubscription = FlutterBluePlus.isScanning.listen((scanning) {
       isScanning = scanning;
       notifyListeners();
     });
-    _load();
   }
 
   static const serviceId = '0000ffe0-0000-1000-8000-00805f9b34fb';
@@ -27,10 +29,16 @@ class AppState extends ChangeNotifier {
   final List<LightScene> scenes = [];
   final List<int> favorites = [];
   final List<String> activity = [];
+  final ValueNotifier<bool> darkMode = ValueNotifier(true);
+  final ValueNotifier<int> tabSelection = ValueNotifier(0);
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<bool>? _scanningSubscription;
   StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
   Timer? _colorDebounce;
+  Timer? _brightnessDebounce;
+  Timer? _speedDebounce;
+  Timer? _temperatureDebounce;
+  Timer? _persistenceDebounce;
   BluetoothDevice? device;
   BluetoothCharacteristic? _writeCharacteristic;
   ProtocolOptions options = const ProtocolOptions();
@@ -48,15 +56,22 @@ class AppState extends ChangeNotifier {
   bool isDark = true;
   String? errorMessage;
   String? deviceName;
+  String? lastDeviceId;
   int? rssi;
   int? sleepMinutes;
   Timer? _sleepTimer;
+  bool _restoreInProgress = false;
+  bool _manualDisconnect = false;
 
   List<ScanResult> get devices =>
-      _results.values.toList()..sort((a, b) => b.rssi.compareTo(a.rssi));
+      _results.values
+          .where((result) => result.device.remoteId.str != lastDeviceId)
+          .toList()
+        ..sort((a, b) => b.rssi.compareTo(a.rssi));
 
   void selectTab(int index) {
     selectedTab = index;
+    tabSelection.value = index;
     notifyListeners();
   }
 
@@ -66,7 +81,7 @@ class AppState extends ChangeNotifier {
       ? 'Connecting'
       : 'Not connected';
 
-  Future<void> _load() async {
+  Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
     final storedScenes = LightScene.decodeAll(
       prefs.getString('rgbelement.scenes'),
@@ -83,6 +98,7 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(log);
     isDark = prefs.getBool('rgbelement.dark') ?? true;
+    darkMode.value = isDark;
     selectedColor =
         0xff000000 |
         (prefs.getInt('rgbelement.color') ?? (selectedColor & 0xffffff));
@@ -94,6 +110,8 @@ class AppState extends ChangeNotifier {
       powerOn: prefs.getInt('rgbelement.powerOn') ?? 1,
       powerOff: prefs.getInt('rgbelement.powerOff') ?? 0,
     );
+    lastDeviceId = prefs.getString('rgbelement.lastDeviceId');
+    deviceName = prefs.getString('rgbelement.lastDeviceName');
     notifyListeners();
   }
 
@@ -116,6 +134,23 @@ class AppState extends ChangeNotifier {
     await prefs.setInt('rgbelement.colorByte7', options.colorDataByte7);
     await prefs.setInt('rgbelement.powerOn', options.powerOn);
     await prefs.setInt('rgbelement.powerOff', options.powerOff);
+    if (lastDeviceId == null) {
+      await prefs.remove('rgbelement.lastDeviceId');
+      await prefs.remove('rgbelement.lastDeviceName');
+    } else {
+      await prefs.setString('rgbelement.lastDeviceId', lastDeviceId!);
+      await prefs.setString(
+        'rgbelement.lastDeviceName',
+        deviceName ?? 'RGB Light',
+      );
+    }
+  }
+
+  void _scheduleSave() {
+    _persistenceDebounce?.cancel();
+    _persistenceDebounce = Timer(const Duration(milliseconds: 350), () {
+      unawaited(_save());
+    });
   }
 
   Future<void> scan() async {
@@ -171,19 +206,76 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> connect(BluetoothDevice target) async {
+  Future<void> reconnectSaved() async {
+    final id = lastDeviceId;
+    if (id == null ||
+        id.isEmpty ||
+        isConnecting ||
+        isConnected ||
+        _restoreInProgress) {
+      return;
+    }
+    _manualDisconnect = false;
+    _restoreInProgress = true;
+    try {
+      await connect(BluetoothDevice.fromId(id), restoring: true);
+    } finally {
+      _restoreInProgress = false;
+    }
+  }
+
+  Future<void> forgetSavedDevice() async {
+    await disconnect(userInitiated: true);
+    lastDeviceId = null;
+    deviceName = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('rgbelement.lastDeviceId');
+    await prefs.remove('rgbelement.lastDeviceName');
+    notifyListeners();
+  }
+
+  Future<void> _restoreLastDevice() async {
+    if (_manualDisconnect) return;
+    await reconnectSaved();
+  }
+
+  Future<void> restoreSavedDeviceOnStartup() => _restoreLastDevice();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_restoreLastDevice());
+    }
+  }
+
+  Future<void> connect(BluetoothDevice target, {bool restoring = false}) async {
+    if (device?.remoteId == target.remoteId && isConnected) return;
+    if (device?.remoteId == target.remoteId && isConnecting) return;
     await stopScan();
     await disconnect();
+    _manualDisconnect = false;
     device = target;
     isConnecting = true;
     errorMessage = null;
     final result = _results[target.remoteId.str];
+    final rememberedName = target.remoteId.str == lastDeviceId
+        ? deviceName
+        : null;
     deviceName = target.platformName.isNotEmpty
         ? target.platformName
-        : result?.advertisementData.advName;
+        : result?.advertisementData.advName ?? rememberedName;
     rssi = result?.rssi;
     notifyListeners();
     try {
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        final sdkInt = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+        if (sdkInt >= 31 &&
+            !(await Permission.bluetoothConnect.request()).isGranted) {
+          throw Exception(
+            'Bluetooth permission is needed to reconnect to your light.',
+          );
+        }
+      }
       await target.connect(
         timeout: const Duration(seconds: 15),
         license: License.nonprofit,
@@ -210,13 +302,18 @@ class AppState extends ChangeNotifier {
       _writeCharacteristic = characteristic;
       isConnected = true;
       isOn = true;
+      lastDeviceId = target.remoteId.str;
+      deviceName ??= target.platformName.isNotEmpty
+          ? target.platformName
+          : 'RGB Light';
+      unawaited(_save());
       _record('Connected to ${deviceName ?? 'RGB light'}');
       await send(options.power(true));
     } catch (error) {
       isConnecting = false;
       isConnected = false;
       errorMessage = _friendlyError(error);
-      _record('Connection failed: $errorMessage');
+      if (!restoring) _record('Connection failed: $errorMessage');
       try {
         await target.disconnect();
       } catch (_) {}
@@ -224,7 +321,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> disconnect() async {
+  Future<void> disconnect({bool userInitiated = false}) async {
+    if (userInitiated) _manualDisconnect = true;
     _colorDebounce?.cancel();
     await _connectionSubscription?.cancel();
     _connectionSubscription = null;
@@ -266,7 +364,7 @@ class AppState extends ChangeNotifier {
 
   void setColor(int color, {bool debounce = true}) {
     selectedColor = color | 0xff000000;
-    _save();
+    _scheduleSave();
     notifyListeners();
     _colorDebounce?.cancel();
     if (!debounce) {
@@ -298,21 +396,30 @@ class AppState extends ChangeNotifier {
   void setBrightness(int value) {
     brightness = value.clamp(0, 100);
     notifyListeners();
-    send(options.brightness(brightness));
-    _save();
+    _brightnessDebounce?.cancel();
+    _brightnessDebounce = Timer(const Duration(milliseconds: 70), () {
+      unawaited(send(options.brightness(brightness)));
+    });
+    _scheduleSave();
   }
 
   void setSpeed(int value) {
     speed = value.clamp(0, 100);
     notifyListeners();
-    send(options.speed(speed));
-    _save();
+    _speedDebounce?.cancel();
+    _speedDebounce = Timer(const Duration(milliseconds: 70), () {
+      unawaited(send(options.speed(speed)));
+    });
+    _scheduleSave();
   }
 
   void setTemperature(int value) {
     temperature = value.clamp(0, 100);
     notifyListeners();
-    send(options.temperature(temperature));
+    _temperatureDebounce?.cancel();
+    _temperatureDebounce = Timer(const Duration(milliseconds: 70), () {
+      unawaited(send(options.temperature(temperature)));
+    });
   }
 
   void setPattern(int value) {
@@ -401,6 +508,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> setDark(bool value) async {
     isDark = value;
+    darkMode.value = value;
     notifyListeners();
     await _save();
   }
@@ -456,11 +564,18 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scanSubscription?.cancel();
     _scanningSubscription?.cancel();
     _connectionSubscription?.cancel();
     _colorDebounce?.cancel();
+    _brightnessDebounce?.cancel();
+    _speedDebounce?.cancel();
+    _temperatureDebounce?.cancel();
+    _persistenceDebounce?.cancel();
     _sleepTimer?.cancel();
+    darkMode.dispose();
+    tabSelection.dispose();
     super.dispose();
   }
 }

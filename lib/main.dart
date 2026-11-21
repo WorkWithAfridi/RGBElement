@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'data/pattern_catalog.dart';
@@ -7,9 +9,21 @@ import 'models/light_scene.dart';
 import 'protocol/leddmx_protocol.dart';
 import 'state/app_state.dart';
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(RGBElementApp(state: AppState()));
+Future<void> main() async {
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
+  final state = AppState();
+  final start = DateTime.now();
+  await state.initialize();
+  final elapsed = DateTime.now().difference(start);
+  if (elapsed < const Duration(milliseconds: 550)) {
+    await Future<void>.delayed(const Duration(milliseconds: 550) - elapsed);
+  }
+  runApp(RGBElementApp(state: state));
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    FlutterNativeSplash.remove();
+    unawaited(state.restoreSavedDeviceOnStartup());
+  });
 }
 
 class RGBElementApp extends StatelessWidget {
@@ -17,10 +31,9 @@ class RGBElementApp extends StatelessWidget {
   final AppState state;
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: state,
-    builder: (context, _) {
-      final dark = state.isDark;
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: state.darkMode,
+    builder: (context, dark, _) {
       final scheme = ColorScheme.fromSeed(
         seedColor: const Color(0xffa8ed78),
         brightness: dark ? Brightness.dark : Brightness.light,
@@ -72,29 +85,54 @@ class RGBElementApp extends StatelessWidget {
   );
 }
 
-class RGBElementHome extends StatelessWidget {
+class RGBElementHome extends StatefulWidget {
   const RGBElementHome({super.key, required this.state});
   final AppState state;
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: state,
-    builder: (context, _) => Scaffold(
+  State<RGBElementHome> createState() => _RGBElementHomeState();
+}
+
+class _RGBElementHomeState extends State<RGBElementHome> {
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+    valueListenable: widget.state.tabSelection,
+    builder: (context, selectedTab, _) => Scaffold(
       body: SafeArea(
         child: IndexedStack(
-          index: state.selectedTab,
+          index: selectedTab,
           children: [
-            _HomeTab(state: state),
-            _EffectsTab(state: state),
-            _StudioTab(state: state),
-            _DevicesTab(state: state),
-            _SettingsTab(state: state),
+            _ObservedTab(
+              state: widget.state,
+              active: selectedTab == 0,
+              builder: () => _HomeTab(state: widget.state),
+            ),
+            _ObservedTab(
+              state: widget.state,
+              active: selectedTab == 1,
+              builder: () => _EffectsTab(state: widget.state),
+            ),
+            _ObservedTab(
+              state: widget.state,
+              active: selectedTab == 2,
+              builder: () => _StudioTab(state: widget.state),
+            ),
+            _ObservedTab(
+              state: widget.state,
+              active: selectedTab == 3,
+              builder: () => _DevicesTab(state: widget.state),
+            ),
+            _ObservedTab(
+              state: widget.state,
+              active: selectedTab == 4,
+              builder: () => _SettingsTab(state: widget.state),
+            ),
           ],
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: state.selectedTab,
-        onDestinationSelected: state.selectTab,
+        selectedIndex: selectedTab,
+        onDestinationSelected: widget.state.selectTab,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.wb_sunny_outlined),
@@ -124,6 +162,54 @@ class RGBElementHome extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+class _ObservedTab extends StatefulWidget {
+  const _ObservedTab({
+    required this.state,
+    required this.active,
+    required this.builder,
+  });
+
+  final AppState state;
+  final bool active;
+  final Widget Function() builder;
+
+  @override
+  State<_ObservedTab> createState() => _ObservedTabState();
+}
+
+class _ObservedTabState extends State<_ObservedTab> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) widget.state.addListener(_onStateChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ObservedTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state != widget.state || oldWidget.active != widget.active) {
+      oldWidget.state.removeListener(_onStateChanged);
+      if (widget.active) widget.state.addListener(_onStateChanged);
+    }
+  }
+
+  void _onStateChanged() {
+    if (mounted && widget.active) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.state.removeListener(_onStateChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Offstage(
+    offstage: !widget.active,
+    child: TickerMode(enabled: widget.active, child: widget.builder()),
   );
 }
 
@@ -420,7 +506,11 @@ class _LightHero extends StatelessWidget {
                           Text(
                             state.isConnected
                                 ? 'Tap the switch to ${state.isOn ? 'wind down' : 'bring it to life'}'
-                                : 'Connect a light to start creating',
+                                : state.lastDeviceId == null
+                                ? 'Connect a light to start creating'
+                                : state.isConnecting
+                                ? 'Reconnecting to your saved light…'
+                                : 'Your light is saved · reconnect from Lights',
                             style: TextStyle(
                               fontSize: 11,
                               color: Theme.of(context).colorScheme.onSurface
@@ -1390,10 +1480,10 @@ class _DevicesTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
           child: _ErrorBanner(message: state.errorMessage!),
         ),
-      if (state.isConnected)
+      if (state.lastDeviceId != null)
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-          child: _ConnectedDeviceCard(state: state),
+          child: _SavedDeviceCard(state: state),
         ),
       Padding(
         padding: const EdgeInsets.fromLTRB(21, 4, 21, 12),
@@ -1439,6 +1529,8 @@ class _DevicesTab extends StatelessWidget {
                       Text(
                         state.isScanning
                             ? 'Looking for your light…'
+                            : state.lastDeviceId != null
+                            ? 'Your light is saved above'
                             : 'Let’s find your light',
                         style: const TextStyle(
                           fontWeight: FontWeight.w700,
@@ -1447,25 +1539,15 @@ class _DevicesTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        'Keep the controller powered and nearby. Your phone will discover LEDDMX Bluetooth lights.',
+                        state.lastDeviceId != null
+                            ? 'You can reconnect to it anytime. Scan to find another light.'
+                            : 'Keep the controller powered and nearby. Your phone will discover LEDDMX Bluetooth lights.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 11,
                           height: 1.5,
                           color: Theme.of(context).colorScheme.onSurface
                               .withValues(alpha: .58),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      FilledButton.icon(
-                        onPressed: state.isScanning ? null : state.scan,
-                        icon: Icon(
-                          state.isScanning
-                              ? Icons.hourglass_top_rounded
-                              : Icons.search_rounded,
-                        ),
-                        label: Text(
-                          state.isScanning ? 'Scanning…' : 'Find a light',
                         ),
                       ),
                     ],
@@ -1516,8 +1598,8 @@ class _DevicesTab extends StatelessWidget {
   );
 }
 
-class _ConnectedDeviceCard extends StatelessWidget {
-  const _ConnectedDeviceCard({required this.state});
+class _SavedDeviceCard extends StatelessWidget {
+  const _SavedDeviceCard({required this.state});
   final AppState state;
   @override
   Widget build(BuildContext context) => Container(
@@ -1548,7 +1630,11 @@ class _ConnectedDeviceCard extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                state.device?.remoteId.str ?? 'Bluetooth LE',
+                state.isConnected
+                    ? 'Connected and ready'
+                    : state.isConnecting
+                    ? 'Reconnecting…'
+                    : 'Saved here · reconnect anytime',
                 style: TextStyle(
                   fontSize: 10,
                   color: Theme.of(context).colorScheme.onSurface
@@ -1558,9 +1644,27 @@ class _ConnectedDeviceCard extends StatelessWidget {
             ],
           ),
         ),
-        TextButton(
-          onPressed: state.disconnect,
-          child: const Text('Disconnect'),
+        if (state.isConnected)
+          TextButton(
+            onPressed: () => state.disconnect(userInitiated: true),
+            child: const Text('Disconnect'),
+          )
+        else
+          TextButton.icon(
+            onPressed: state.isConnecting ? null : state.reconnectSaved,
+            icon: state.isConnecting
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.bluetooth_connected_rounded, size: 16),
+            label: Text(state.isConnecting ? 'Connecting' : 'Reconnect'),
+          ),
+        IconButton(
+          tooltip: 'Forget this light',
+          onPressed: state.forgetSavedDevice,
+          icon: const Icon(Icons.delete_outline_rounded, size: 19),
         ),
       ],
     ),
