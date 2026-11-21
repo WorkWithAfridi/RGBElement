@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RGBElement cover</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 1600px; height: 900px; overflow: hidden; }
+      body {
+        color: #f0f3e8;
+        background:
+          radial-gradient(ellipse at 75% 48%, rgba(91, 139, 82, .21), transparent 36%),
+          radial-gradient(ellipse at 88% 4%, rgba(81, 139, 157, .12), transparent 29%),
+          #101310;
+        font-family: Inter, "Segoe UI", Arial, sans-serif;
+      }
+      .grid {
+        position: absolute; inset: 0; opacity: .18;
+        background-image: linear-gradient(rgba(207,236,191,.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(207,236,191,.08) 1px, transparent 1px);
+        background-size: 64px 64px;
+        mask-image: linear-gradient(90deg, transparent 32%, black 76%);
+      }
+      .glow { position: absolute; width: 620px; height: 620px; left: 830px; top: 190px;
+        border-radius: 50%; border: 1px solid rgba(178,237,121,.13);
+        box-shadow: 0 0 90px rgba(178,237,121,.08), inset 0 0 80px rgba(178,237,121,.05); }
+      .glow::before, .glow::after { content: ""; position: absolute; inset: 48px; border-radius: 50%; border: 1px solid rgba(178,237,121,.1); }
+      .glow::after { inset: 108px; }
+      .content { position: absolute; left: 118px; top: 112px; width: 690px; }
+      .brand { display: flex; align-items: center; gap: 18px; margin-bottom: 82px; }
+      .brand img { width: 82px; height: 82px; object-fit: contain; }
+      .brand-name { font-size: 29px; font-weight: 760; letter-spacing: 4px; }
+      .brand-name span { color: #b2ed79; }
+      .eyebrow { color: #b2ed79; font-weight: 750; letter-spacing: 5px; font-size: 14px; margin-bottom: 18px; }
+      h1 { margin: 0; font-size: 76px; line-height: 1.02; letter-spacing: -4px; font-weight: 760; }
+      .summary { margin: 28px 0 0; max-width: 565px; color: #aab1a7; font-size: 22px; line-height: 1.55; }
+      .chips { display: flex; gap: 12px; margin-top: 44px; }
+      .chip { padding: 13px 17px; border: 1px solid rgba(198,220,188,.18); border-radius: 24px; background: rgba(30,38,31,.75); color: #dbe4d4; font-size: 14px; font-weight: 650; }
+      .chip b { color: #b2ed79; font-weight: 750; }
+      .caption { position: absolute; left: 120px; bottom: 70px; color: #70796f; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
+      .phone { position: absolute; background: #080a08; border: 2px solid #485148; border-radius: 47px; padding: 12px; box-shadow: 0 34px 90px rgba(0,0,0,.6); overflow: hidden; }
+      .phone img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 35px; }
+      .phone-control { left: 927px; top: 42px; width: 374px; height: 816px; transform: rotate(-3deg); }
+      .phone-studio { left: 1249px; top: 191px; width: 299px; height: 653px; transform: rotate(4deg); border-color: #65745e; }
+      .device-glint { position: absolute; inset: 13px auto 13px 15px; width: 3px; border-radius: 3px; background: rgba(255,255,255,.15); z-index: 2; }
+    </style>
+  </head>
+  <body>
+    <div class="grid"></div>
+    <div class="glow"></div>
+    <main class="content">
+      <div class="brand">
+        <img src="branding/splash_mark.png" alt="" />
+        <div class="brand-name"><span>RGB</span>ELEMENT</div>
+      </div>
+      <div class="eyebrow">YOUR SPACE, IN COLOR</div>
+      <h1>In a new<br />light.</h1>
+      <p class="summary">A modern Bluetooth companion for LEDDMX RGB lights. Shape the color, find your favorite effects, and save the moods you love.</p>
+      <div class="chips">
+        <div class="chip"><b>01</b> Color studio</div>
+        <div class="chip"><b>211</b> Built-in effects</div>
+        <div class="chip"><b>∞</b> Saved looks</div>
+      </div>
+    </main>
+    <div class="phone phone-control"><div class="device-glint"></div><img src="screenshots/control.png" alt="RGBElement color controls" /></div>
+    <div class="phone phone-studio"><div class="device-glint"></div><img src="screenshots/studio.png" alt="RGBElement saved looks" /></div>
+    <div class="caption">Bluetooth lighting · Flutter · Android &amp; iOS</div>
+  </body>
+</html>
